@@ -1,0 +1,288 @@
+from http import HTTPMethod, HTTPStatus
+from typing import Any, Dict, Optional, Union
+
+import requests
+
+from agent_ready_tools.clients.auth_manager import GoogleAuthManager
+from agent_ready_tools.utils.credentials import CredentialKeys, get_tool_credentials
+from agent_ready_tools.utils.systems import Systems
+import base64
+
+class GoogleClient:
+    """A remote client for Google."""
+
+    def __init__(
+        self,
+        base_url: str,
+        token_url: str,
+        client_id: str,
+        client_secret: str,
+        initial_bearer_token: str,
+        initial_refresh_token: str,
+    ):
+        """
+        Args:
+            base_url: The base URL for the Google API.
+            token_url: The URL for authentication tokens for the Google API.
+            client_id: The client ID authenticate with.
+            client_secret: The client secret to authenticate with.
+            initial_bearer_token: The initial bearer token from wxo-domains credentials file.
+            initial_refresh_token: The initial refresh token from wxo-domains credentials file.
+        """
+        self.base_url = base_url
+        self.auth_manager = GoogleAuthManager(
+            token_url=token_url,
+            client_id=client_id,
+            client_secret=client_secret,
+            initial_bearer_token=initial_bearer_token,
+            initial_refresh_token=initial_refresh_token,
+        )
+        self.headers = {
+            "Content-Type": "application/json",
+        }
+
+    def _request_with_reauth(
+        self,
+        method: str,
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
+        payload: Optional[Union[Dict[str, Any], bytes, bytearray]] = None,
+    ) -> requests.Response:
+        """Makes a <method> request to the given URL with the given params and payload, retrying on
+        token expiry."""
+        for attempt in range(2):  # 1 retry
+            self.headers["Authorization"] = f"Bearer {self.auth_manager.get_bearer_token()}"
+
+            data, json_payload = (
+                (payload, None) if isinstance(payload, (bytes, bytearray)) else (None, payload)
+            )
+
+            response = requests.request(
+                method=method,
+                url=url,
+                params=params,
+                headers=self.headers,
+                data=data,
+                json=json_payload,
+            )
+            if response.status_code == HTTPStatus.UNAUTHORIZED and attempt == 0:
+                self.auth_manager.refresh_bearer_token()
+                continue  # retry the request
+            else:
+                break
+        return response
+
+    def delete_request(
+        self,
+        entity: str,
+        service: str = "drive",
+        params: Optional[dict[str, Any]] = None,
+        payload: Optional[dict[str, Any]] = None,
+        version: str = "v3",
+    ) -> int:
+        """
+        Executes a DELETE request against Google API.
+
+        Args:
+            entity: The specific entity to make the request against.
+            service: The Google API service to use (e.g., "drive", "storage"). Defaults to "drive".
+            params: Query parameters for the REST API.
+            payload: The request payload.
+            version: The specific version of the API.
+
+        Returns:
+            The JSON response from the Google REST API.
+        """
+
+        response = self._request_with_reauth(
+            HTTPMethod.DELETE,
+            url=f"{self.base_url}/{service}/{version}/{entity}",
+            payload=payload,
+            params=params,
+        )
+        response.raise_for_status()
+        return response.status_code
+
+    def patch_request(
+        self,
+        entity: str,
+        service: str = "drive",
+        params: Optional[dict[str, Any]] = None,
+        payload: Optional[dict[str, Any]] = None,
+        version: str = "v3",
+    ) -> Dict[str, Any]:
+        """
+        Executes a PATCH request against Google API.
+
+        Args:
+            entity: The specific entity to make the request against.
+            service: The Google API service to use (e.g., "drive", "storage"). Defaults to "drive".
+            params: Query parameters for the REST API.
+            payload: The request payload.
+            version: The specific version of the API.
+
+        Returns:
+            The JSON response from the Google REST API.
+        """
+        response = self._request_with_reauth(
+            HTTPMethod.PATCH,
+            url=f"{self.base_url}/{service}/{version}/{entity}",
+            payload=payload,
+            params=params,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def put_request(
+        self,
+        entity: str,
+        service: str = "drive",
+        params: Optional[dict[str, Any]] = None,
+        payload: Optional[dict[str, Any]] = None,
+        version: str = "v3",
+    ) -> Dict[str, Any]:
+        """
+        Executes a PUT request against Google API.
+
+        Args:
+            entity: The specific entity to make the request against.
+            service: The Google API service to use (e.g., "drive", "storage"). Defaults to "drive".
+            params: Query parameters for the REST API.
+            payload: The request payload.
+            version: The specific version of the API.
+
+        Returns:
+            The JSON response from the Google REST API.
+        """
+
+        response = self._request_with_reauth(
+            HTTPMethod.PUT,
+            url=f"{self.base_url}/{service}/{version}/{entity}",
+            payload=payload,
+            params=params,
+        )
+
+        response.raise_for_status()
+        return response.json()
+
+    def post_request(
+        self,
+        entity: str,
+        service: str = "drive",
+        params: Optional[dict[str, Any]] = None,
+        payload: Optional[Union[dict[str, Any], bytes, bytearray]] = None,
+        version: str = "v3",
+    ) -> Dict[str, Any]:
+        """
+        Executes a POST request against Google API.
+
+        Args:
+            entity: The specific entity to make the request against.
+            service: The Google API service to use (e.g., "drive", "storage"). Defaults to "drive".
+            params: Query parameters for the REST API.
+            payload: The request payload.
+            version: The specific version of the API.
+
+        Returns:
+            The JSON response from the Google REST API.
+        """
+        response = self._request_with_reauth(
+            HTTPMethod.POST,
+            url=f"{self.base_url}/{service}/{version}/{entity}",
+            payload=payload,
+            params=params,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def get_request(
+        self,
+        entity: str,
+        service: str = "drive",
+        params: Optional[dict[str, Any]] = None,
+        content: Optional[bool] = False,
+        version: str = "v3",
+    ) -> Dict[str, Any]:
+        """
+        Executes a GET request against Google API.
+
+        Args:
+            entity: The specific entity to make the request against.
+            service: The Google API service to use (e.g., "drive", "storage"). Defaults to "drive".
+            params: Query parameters for the REST API.
+            content: This is optional parameter to retrieve the file content as text. Defaults to
+                False.
+            version: The specific version of the API.
+
+        Returns:
+            The JSON response from the Google REST API.
+        """
+
+        response = self._request_with_reauth(
+            HTTPMethod.GET, url=f"{self.base_url}/{service}/{version}/{entity}", params=params
+        )
+        response.raise_for_status()
+        if content:
+            return {"text": response.text, "headers": response.headers}
+        return response.json()
+    
+    def download_file(
+        self,
+        file_id: str,
+        export_mime_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Downloads the content of a Google Drive file.
+
+        Args:
+            file_id: The ID of the file in Google Drive.
+            export_mime_type: Optional MIME type if exporting a Google Doc/Sheet.
+
+        Returns:
+            Dict with:
+                - 'content': bytes for binary files or UTF-8 string for text
+                - 'headers': response headers
+        """
+        entity = f"files/{file_id}/export" if export_mime_type else f"files/{file_id}"
+        params = {"mimeType": export_mime_type} if export_mime_type else {"alt": "media"}
+
+        response = self._request_with_reauth(
+            "GET",
+            url=f"{self.base_url}/drive/v3/{entity}",
+            params=params
+        )
+        response.raise_for_status()
+
+        content_bytes = response.content
+
+        try:
+            # Try decoding as UTF-8 text
+            content = content_bytes.decode("utf-8")
+        except (UnicodeDecodeError, AttributeError):
+            # Binary fallback: always base64 encode bytes
+            content = base64.b64encode(content_bytes).decode("utf-8")
+
+        return {"content": content, "headers": response.headers}
+
+
+def get_google_client() -> GoogleClient:
+    """
+    Get the google client with credentials.
+
+    NOTE: DO NOT CALL DIRECTLY IN TESTING!
+
+    To test, either mock this call or call the client directly.
+
+    Returns:
+        A new instance of the google client.
+    """
+    credentials = get_tool_credentials(Systems.GOOGLE)
+    google_client = GoogleClient(
+        base_url=credentials[CredentialKeys.BASE_URL],
+        token_url=credentials[CredentialKeys.TOKEN_URL],
+        client_id=credentials[CredentialKeys.CLIENT_ID],
+        client_secret=credentials[CredentialKeys.CLIENT_SECRET],
+        initial_bearer_token=credentials[CredentialKeys.BEARER_TOKEN],
+        initial_refresh_token=credentials[CredentialKeys.REFRESH_TOKEN],
+    )
+    return google_client
