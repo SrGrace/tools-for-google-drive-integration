@@ -1,0 +1,15 @@
+ibm-watsonx-orchestrate==1.10.2
+fuzzywuzzy==0.18.0
+msal==1.32.3
+types-requests==2.32.0.20250602
+xsdata==25.4
+simple-salesforce==1.12.6
+python-dateutil==2.9.0.post0
+pyjwt==2.10.1
+pydantic-extra-types==2.10.5
+requests==2.32.4
+ibm-cos-sdk==2.14.3
+
+# Stay at bottom of file, these packages will be pulled as a dep from above.
+# Used to resolve pants deps inference warnings
+pycountry==24.6.1 # From pydantic-extra-types
